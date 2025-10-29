@@ -1,5 +1,4 @@
-# Streamlit app entry point
-
+#streamlit entry point
 import os
 import streamlit as st
 from io import BytesIO
@@ -8,10 +7,10 @@ from utils.cover_letter import generate_cover_letter
 from utils.interview_questions import generate_interview_questions
 from utils.pdf_formatter import create_resume_pdf_bytes, create_cover_letter_pdf_bytes
 
-# App config
+# --- CONFIG ---
 st.set_page_config(page_title="AI Resume Builder", layout="wide")
 
-# Header
+# --- HEADER ---
 st.markdown(
     """
     <div style="display:flex;align-items:center;justify-content:space-between">
@@ -20,7 +19,7 @@ st.markdown(
         <p style="margin:0;color:gray">Build Your Resume in Minutes — Powered by AI</p>
       </div>
       <div style="text-align:right;color:gray;font-size:13px">
-        <div>Powered by Groq LLM | Deployed on Streamlit Cloud</div>
+        Powered by Groq LLM | Deployed on Streamlit Cloud
       </div>
     </div>
     <hr/>
@@ -28,7 +27,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Initialize session state for dynamic experience entries
+# --- STATE ---
 if "experiences" not in st.session_state:
     st.session_state.experiences = [
         {"role": "", "company": "", "duration": "", "description": ""}
@@ -39,26 +38,41 @@ def add_experience():
         {"role": "", "company": "", "duration": "", "description": ""}
     )
 
-def remove_experience(index):
+def remove_experience(idx):
     if len(st.session_state.experiences) > 1:
-        st.session_state.experiences.pop(index)
+        st.session_state.experiences.pop(idx)
 
-# ----------- MAIN FORM -----------
-with st.form("input_form"):
+# --- EXPERIENCE MANAGEMENT BUTTONS ---
+st.markdown("### Work Experience Entries")
+exp_add_col1, exp_add_col2 = st.columns([1, 9])
+if exp_add_col1.button("➕ Add Experience"):
+    add_experience()
+    st.experimental_rerun()
+
+for i in range(len(st.session_state.experiences)):
+    remove_col = st.columns([1, 9])[0]
+    if remove_col.button(f"❌ Remove Experience #{i+1}", key=f"remove_{i}_outside"):
+        remove_experience(i)
+        st.experimental_rerun()
+
+# --- FORM ---
+with st.form("resume_form"):
+    st.markdown("### Personal Information")
     col1, col2 = st.columns([2, 1])
     with col1:
-        full_name = st.text_input("Full Name", "")
-        email = st.text_input("Email", "")
-        phone = st.text_input("Phone (optional)", "")
+        full_name = st.text_input("Full Name")
+        email = st.text_input("Email")
+        phone = st.text_input("Phone (optional)")
     with col2:
-        career_goal = st.text_input("Career Goal / Target Role", "")
+        career_goal = st.text_input("Career Goal / Target Role")
 
     st.markdown("### Education")
     education = st.text_area(
-        "Education Details (degree, institution, years, relevant coursework)", height=100
+        "Education Details (degree, institution, years, relevant coursework)",
+        height=100,
     )
 
-    st.markdown("### Work Experience (fill your details below)")
+    st.markdown("### Work Experience Details")
     for i, exp in enumerate(st.session_state.experiences):
         st.markdown(f"**Experience #{i+1}**")
         cols = st.columns([2, 2, 1, 3])
@@ -73,47 +87,22 @@ with st.form("input_form"):
     skills = st.text_area("Skills (comma-separated or newline)", height=80)
     additional_info = st.text_area("Additional Info / Achievements (optional)", height=80)
 
-    # ✅ Proper submit button inside the form
-    submitted = st.form_submit_button("Generate Resume")
+    # ✅ THIS IS THE PROPER SUBMIT BUTTON
+    submitted = st.form_submit_button("🚀 Generate Resume")
 
-# ----------- EXPERIENCE MANAGEMENT BUTTONS OUTSIDE FORM -----------
-st.markdown("### Manage Work Experience")
+# --- FOOTER ---
+st.markdown("---")
+st.markdown("⚠️ Generated content should be reviewed manually before submission.")
 
-exp_add_col1, exp_add_col2 = st.columns([1, 9])
-if exp_add_col1.button("➕ Add Experience"):
-    add_experience()
-    st.experimental_rerun()
-
-for i in range(len(st.session_state.experiences)):
-    remove_col = st.columns([1, 9])[0]
-    if remove_col.button(f"❌ Remove Experience #{i+1}", key=f"remove_{i}_outside"):
-        remove_experience(i)
-        st.experimental_rerun()
-
-# ----------- FOOTER -----------
-def footer():
-    st.markdown("---")
-    st.markdown("⚠️ Generated content should be reviewed manually before submission.")
-footer()
-
-# ----------- ON SUBMIT -----------
+# --- SUBMIT HANDLER ---
 if submitted:
     if not full_name or not email:
         st.error("Please provide at least Full Name and Email.")
     else:
-        with st.spinner("Generating resume, cover letter and interview questions..."):
-            experiences_input = []
-            for e in st.session_state.experiences:
-                if any(v.strip() for v in e.values()):
-                    experiences_input.append(
-                        {
-                            "role": e["role"],
-                            "company": e["company"],
-                            "duration": e["duration"],
-                            "description": e["description"],
-                        }
-                    )
-
+        with st.spinner("Generating resume, cover letter, and interview questions..."):
+            experiences_input = [
+                e for e in st.session_state.experiences if any(v.strip() for v in e.values())
+            ]
             applicant = {
                 "full_name": full_name,
                 "email": email,
@@ -125,30 +114,21 @@ if submitted:
                 "additional_info": additional_info,
             }
 
-            # Generate structured resume content via LLM or fallback
             resume_struct = generate_resume_structured(applicant)
-
-            # Generate cover letter
             cover_letter_text = generate_cover_letter(applicant, resume_struct)
-
-            # Generate interview questions
             interview_qs = generate_interview_questions(applicant)
 
-        # ----------- OUTPUT SECTIONS -----------
         tabs = st.tabs(["Resume Preview", "Cover Letter", "Interview Questions"])
 
-        # Resume Preview
+        # Resume
         with tabs[0]:
             st.subheader("Resume Preview")
-            st.markdown("**Basic structured view**")
             st.write(resume_struct)
-
-            st.markdown("---")
             resume_text = []
             resume_text.append(f"# {resume_struct.get('name','')}\n")
             resume_text.append(f"**{resume_struct.get('title','')}**\n")
             if resume_struct.get("summary"):
-                resume_text.append(f"**Summary**\n{resume_struct.get('summary')}\n")
+                resume_text.append(f"**Summary**\n{resume_struct['summary']}\n")
             if resume_struct.get("experience"):
                 resume_text.append("**Experience**")
                 for ex in resume_struct["experience"]:
@@ -159,7 +139,7 @@ if submitted:
                 resume_text.append("**Education**")
                 for ed in resume_struct["education"]:
                     resume_text.append(
-                        f"- {ed.get('degree','')} — {ed.get('institution','')} ({ed.get('years','')})\n"
+                        f"- {ed.get('degree','')} — {ed.get('institution','')} ({ed.get('years','')})"
                     )
             if resume_struct.get("skills"):
                 resume_text.append("**Skills**")
@@ -191,11 +171,7 @@ if submitted:
                 file_name=f"{full_name.replace(' ', '_')}_CoverLetter.pdf",
                 mime="application/pdf",
             )
-            st.text_area(
-                "Cover letter text (copy to clipboard)",
-                value=cover_letter_text,
-                height=240,
-            )
+            st.text_area("Copy Cover Letter Text", cover_letter_text, height=200)
 
         # Interview Questions
         with tabs[2]:
@@ -203,4 +179,4 @@ if submitted:
             for i, q in enumerate(interview_qs, start=1):
                 st.write(f"{i}. {q}")
 
-        st.success("✅ Generation complete — please review and edit before using.")
+        st.success("✅ Resume, Cover Letter, and Interview Questions Generated Successfully!")
